@@ -25,6 +25,34 @@ Extract → Transform → Load → Visualize
 | Visualisation | Streamlit · Plotly |
 | NLP (bonus S5) | Scikit-learn · TF-IDF · LDA · VADER |
 
+
+## Pipeline — Architecture technique
+```mermaid
+flowchart LR
+    subgraph COLLECTE["🔵 Phase 1 — Collecte"]
+        A1[NewsAPI] 
+        A2[RSS Feeds\nHackerNews\nBleeping\nZataz\nCISA]
+    end
+
+    subgraph TRAITEMENT["🟢 Phase 2 — Nettoyage"]
+        B1[Pandas\nSuppr. doublons\nNaN → vide\nNorm. texte]
+    end
+
+    subgraph ETL["🟡 Phase 3 — ETL"]
+        C1[PostgreSQL\nSQLAlchemy\ndbt\nAirflow DAG]
+    end
+
+    subgraph VIZ["🔴 Phase 4 — Visualisation"]
+        D1[Streamlit\nPlotly\nFiltres + CSV]
+    end
+
+    subgraph NLP["🩵 Phase 5 — NLP"]
+        E1[TF-IDF\nLDA\nVADER]
+    end
+
+    COLLECTE --> TRAITEMENT --> ETL --> VIZ --> NLP
+```
+
 ## Structure du projet
 ```
 cyberpulse/
@@ -45,3 +73,4 @@ streamlit run app/app.py
 
 ## Période de construction du projet à la Wild code School :
 10 mars → 23 avril 2026 · Projet solo · Formation Data Analyst
+
