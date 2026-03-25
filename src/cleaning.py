@@ -396,12 +396,11 @@ def save_cleaned(df, source_filename):
       source, title, description, url, published_at, collected_at,
       published_date (NOUVEAU), content_length (NOUVEAU), category (NOUVEAU)
     """
-    # Construire le nom du fichier de sortie a partir de la date du fichier source
     date_part = source_filename.replace('articles_', '').replace('.csv', '')
     filename  = f"articles_cleaned_{date_part}.csv"
     filepath  = os.path.join(CLEANED_DIR, filename)
 
-    # Sauvegarder sans l'index pandas (index=False evite une colonne numerotation inutile)
+    # Sauvegarder sans l'index pandas 
     df.to_csv(filepath, index=False, encoding='utf-8')
 
     print(f"Fichier sauvegarde   : {filepath}")
@@ -424,7 +423,6 @@ def clean_all():
     print(f"   {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 55)
 
-    # Charger le fichier brut le plus recent
     df, source_filename = load_latest_raw()
 
     print("\n-- Etape 1 : Suppression des doublons --")
@@ -448,6 +446,8 @@ def clean_all():
     print("\nNettoyage termine !")
     return filepath
 
+def main():
+    clean_all()
 
 # ---------------------------------------------------
 # LANCEMENT DIRECT

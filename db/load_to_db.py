@@ -16,13 +16,36 @@ from datetime import datetime
 # 1. Connexion a PostgreSQL
 # ──────────────────────────────────────────────
 
+# load_dotenv() ne fait rien si .env est absent (container Airflow) — OK
 load_dotenv()
 
 DB_USER     = os.getenv("POSTGRES_USER")
 DB_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 DB_NAME     = os.getenv("POSTGRES_DB")
-DB_HOST     = os.getenv("POSTGRES_HOST", "localhost")
+DB_HOST     = os.getenv("POSTGRES_HOST", "postgres")
 DB_PORT     = os.getenv("POSTGRES_PORT", "5432")
+
+# Validation : on échoue tôt avec un message clair si une variable manque
+_MISSING = [
+    name for name, val in {
+        "POSTGRES_USER":     DB_USER,
+        "POSTGRES_PASSWORD": DB_PASSWORD,
+        "POSTGRES_DB":       DB_NAME,
+    }.items()
+    if not val
+]
+if _MISSING:
+    raise EnvironmentError(
+        f"Variables d'environnement manquantes : {', '.join(_MISSING)}\n"
+        "Ajoutez-les dans docker-compose.yml sous les services "
+        "airflow-webserver et airflow-scheduler :\n"
+        "  environment:\n"
+        "    - POSTGRES_USER=...\n"
+        "    - POSTGRES_PASSWORD=...\n"
+        "    - POSTGRES_DB=...\n"
+        "    - POSTGRES_HOST=postgres\n"
+        "Puis relancez : docker compose down && docker compose up -d"
+    )
 
 DATABASE_URL = (
     f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}"
@@ -190,6 +213,19 @@ def check_counts(engine):
             print(f"  {table:<20} : {count} lignes")
 
     print("-" * 45)
+
+def main():
+    print("=" * 45)
+    print("CyberPulse -- Chargement en base")
+    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("=" * 45)
+
+    engine = get_engine()
+    load_raw(engine)
+    load_stg(engine)
+    check_counts(engine)
+
+    print("\nChargement termine.")
 
 
 # ──────────────────────────────────────────────

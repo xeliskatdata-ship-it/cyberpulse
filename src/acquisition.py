@@ -283,8 +283,12 @@ def collect_all():
     return filepath
 
 
+def main():
+    collect_all()
+
 # ---------------------------------------------------
 # LANCEMENT DIRECT
 # ---------------------------------------------------
 if __name__ == "__main__":
     collect_all()
+
