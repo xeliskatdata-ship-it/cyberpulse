@@ -46,7 +46,7 @@ services:
         pip install -r requirements.txt psycopg2-binary spacy deep-translator --quiet \
         && python -m spacy download en_core_web_sm \
         && python -m spacy download fr_core_news_sm \
-        && streamlit run app/app.py --server.port=8501 --server.address=0.0.0.0
+        && streamlit run app/Accueil.py --server.port=8501 --server.address=0.0.0.0
 
   airflow:
     image: apache/airflow:2.8.0
@@ -92,5 +92,3 @@ volumes:
 
 networks:
   cyberpulse_net:
-    driver: bridge
-    

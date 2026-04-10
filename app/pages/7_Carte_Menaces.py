@@ -25,6 +25,10 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from sidebar_css import inject_sidebar_css
+inject_sidebar_css()
+
 st.markdown("""
 <style>
 html, body, .stApp, [data-testid="stAppViewContainer"],
@@ -572,5 +576,4 @@ html = html.replace("__JAWG_TOKEN__", jawg_token)
 if df_raw.empty:
     st.warning("No articles in the database -- run the acquisition pipeline first.")
 else:
-    components.html(html, height=10000, scrolling=False)
-    
+    components.html(html, height=800, scrolling=False)

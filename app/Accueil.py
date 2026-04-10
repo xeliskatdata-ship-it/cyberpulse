@@ -16,7 +16,12 @@ from utils_lang import t
 
 st.set_page_config(page_title="CyberPulse", layout="wide", initial_sidebar_state="expanded")
 
-# ── CSS global ────────────────────────────────────────────────────────────────
+# ── Sidebar CSS (module partage) ──────────────────────────────────────────────
+sys.path.insert(0, os.path.dirname(__file__))
+from sidebar_css import inject_sidebar_css
+inject_sidebar_css()
+
+# ── CSS global + menu Option B ────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&display=swap');
@@ -39,11 +44,25 @@ html, body, [class*="css"] { font-family: 'Roboto', sans-serif; }
     filter: blur(0.8px); z-index: 0; pointer-events: none;
 }
 [data-testid="stAppViewContainer"] > * { position: relative; z-index: 1; }
+
+/* ── SIDEBAR OPTION B : gradient bar + sections ─────────────────────────── */
 [data-testid="stSidebar"] {
-    z-index: 2 !important; background: #0a1628 !important;
-    border-right: 1px solid rgba(30,111,255,0.2);
+    z-index: 2 !important;
+    background: #050a14 !important;
+    border-right: 1px solid rgba(30,111,255,0.15);
 }
-[data-testid="stSidebar"] * { color: #a8b8d0 !important; }
+[data-testid="stSidebar"]::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, #3b82f6, #a855f7, #3b82f6);
+    background-size: 200% 100%;
+    animation: sidebar-gradient 4s linear infinite;
+}
+@keyframes sidebar-gradient {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+}
+/* Sidebar : gere par sidebar_css.py */
 .live-dot {
     display: inline-block; width: 7px; height: 7px;
     background: #22c55e; border-radius: 50%; margin-right: 8px;
@@ -196,8 +215,8 @@ df_articles = get_stg_articles(limit=500)
 
 total_articles = int(df_k1["nb_articles"].sum())                         if not df_k1.empty else 0
 nb_sources     = df_k1["source"].nunique()                               if not df_k1.empty else 0
-date_max       = df_k1["published_date"].max().strftime("%d/%m/%Y")      if not df_k1.empty else "—"
-last_update    = datetime.now().strftime("%d/%m/%Y à %H:%M:%S")
+date_max       = df_k1["published_date"].max().strftime("%d/%m/%Y")      if not df_k1.empty else "--"
+last_update    = datetime.now().strftime("%d/%m/%Y a %H:%M:%S")
 
 sources_live = (
     df_articles.groupby("source").size()
@@ -224,7 +243,7 @@ with st.sidebar:
     lang = "fr" if lang_choice == "Francais" else "en"
     st.session_state["lang"] = lang
     st.divider()
-    if st.button("Rafraichir les données", key="home_refresh"):
+    if st.button("Rafraichir les donnees", key="home_refresh"):
         force_refresh()
         st.rerun()
     st.divider()
@@ -232,7 +251,7 @@ with st.sidebar:
         f"<div style='font-size:0.72rem;color:#64748b;text-transform:uppercase;"
         f"letter-spacing:.08em;margin-bottom:4px'>Sources actives"
         f"<span style='color:#3b82f6;float:right'>{len(sources_live)}</span></div>"
-        f"<div style='font-size:0.65rem;color:#475569;margin-bottom:8px'>Mise à jour : {last_update}</div>",
+        f"<div style='font-size:0.65rem;color:#475569;margin-bottom:8px'>Mise a jour : {last_update}</div>",
         unsafe_allow_html=True,
     )
     if not sources_live.empty:
@@ -246,7 +265,7 @@ with st.sidebar:
     st.divider()
     st.markdown(
         "<div style='font-size:0.72rem;color:#475569'>"
-        "Sprint 5 · Avril 2026<br>PostgreSQL · dbt · Airflow · Streamlit</div>",
+        "Sprint 5 -- Avril 2026<br>PostgreSQL -- dbt -- Airflow -- Streamlit</div>",
         unsafe_allow_html=True,
     )
 
@@ -266,7 +285,7 @@ border:1px solid #1e2a42;border-radius:16px;padding:40px 36px;margin-bottom:28px
     {logo_tag}
     <div style="font-size:0.95rem;color:#64748b">
         <span class="live-dot"></span>
-        Veille automatique de l'actualité cyber pour l'identification des sujets émergents et suivre leur évolution
+        Veille automatique de l'actualite cyber pour l'identification des sujets emergents et suivre leur evolution
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -316,7 +335,7 @@ body {{ background:transparent; font-family:'Roboto',sans-serif; }}
 <div class="cards">
   <div class="card c-blue">
     <div class="card-accent"></div>
-    <div class="card-label">Articles collectés</div>
+    <div class="card-label">Articles collectes</div>
     <div class="card-value" id="cnt-articles">0</div>
   </div>
   <div class="card c-green">
@@ -327,12 +346,12 @@ body {{ background:transparent; font-family:'Roboto',sans-serif; }}
 </div>
 <div class="date-card">
   <div style="text-align:center">
-    <div class="date-label">Dernière mise à jour</div>
+    <div class="date-label">Derniere mise a jour</div>
     <div class="date-value" id="cnt-date">{date_max}</div>
     <div class="date-sub">Collecte toutes les heures</div>
   </div>
   <div class="refresh-btn" onclick="refreshDate()">
-    <span class="r-icon">↻</span>
+    <span class="r-icon">&#x21bb;</span>
     <span id="refresh-time">{last_update}</span>
   </div>
 </div>
@@ -354,7 +373,7 @@ function refreshDate() {{
   var d = pad(now.getDate())+'/'+pad(now.getMonth()+1)+'/'+now.getFullYear();
   var h = pad(now.getHours())+':'+pad(now.getMinutes())+':'+pad(now.getSeconds());
   el.textContent = d;
-  if (sub) sub.textContent = d + ' à ' + h;
+  if (sub) sub.textContent = d + ' a ' + h;
   el.style.color = '#4ade80';
   setTimeout(function() {{ el.style.color = '#e2e8f0'; }}, 800);
 }}
@@ -382,7 +401,7 @@ if not df_preview.empty:
     dyn_h   = min(38 + len(df_show) * row_h, 620)
     st.dataframe(
         df_show, use_container_width=True, hide_index=True, height=dyn_h,
-        column_config={"Lien": st.column_config.LinkColumn("Lien", display_text="Ouvrir →")},
+        column_config={"Lien": st.column_config.LinkColumn("Lien", display_text="Ouvrir")},
     )
 else:
     st.warning(t("No data", lang))
@@ -391,22 +410,24 @@ else:
 st.markdown("<br><br>", unsafe_allow_html=True)
 
 _KPIS = [
-    ("kpi1", "#3b82f6", "01", "Articles par source et par jour",
-     "Volume de publication par source et évolution temporelle des collectes",
-     "pages/1_kpi1_Articles.py"),
-    ("kpi2", "#a855f7", "02", "Top des Mots-clés fréquents",
-     "Fréquence des termes cyber et identification des sujets dominants",
-     "pages/2_kpi2_Mots_cles.py"),
-    ("kpi3", "#ef4444", "03", "Répartition par type de menaces",
-     "Répartition des catégories : ransomware, phishing, APT, data breach…",
-     "pages/3_KPI3_Menaces.py"),
-    ("kpi4", "#f59e0b", "04", "Évolution hebdomadaire et mensuelle des menaces",
-     " ", "pages/4_KPI4_Tendances.py"),
-    ("kpi5", "#22c55e", "05", "Nombre d'alertes critiques par semaine",
-     " ", "pages/5_KPI5_Alertes.py"),
-    ("kpi6", "#14b8a6", "06", "Top CVE les plus fréquents",
-     "Vulnérabilités officielles les plus citées",
-     "pages/6_KPI6_CVE.py"),
+    ("kpi1", "#3b82f6", "01", "Articles collectes",
+     "Volume de publication par source et evolution temporelle des collectes",
+     "pages/1_Articles_collectes.py"),
+    ("kpi2", "#a855f7", "02", "Suivi des mots-cles",
+     "Frequence des termes cyber et identification des sujets dominants",
+     "pages/2_Suivi_des_mots-cles.py"),
+    ("kpi3", "#ef4444", "03", "Analyse des menaces",
+     "Repartition des categories : ransomware, phishing, APT, data breach...",
+     "pages/3_Analyse_des_menaces.py"),
+    ("kpi4", "#f59e0b", "04", "Analyse des tendances",
+     "Evolution hebdomadaire et mensuelle des vecteurs de menace",
+     "pages/4_Analyse_des_tendances.py"),
+    ("kpi5", "#22c55e", "05", "Analyse des alertes",
+     "Nombre d'alertes critiques par semaine et volatilite",
+     "pages/5_Analyse_des_alertes.py"),
+    ("kpi6", "#14b8a6", "06", "CVEs",
+     "Vulnerabilites officielles les plus citees avec detail NVD",
+     "pages/6_CVEs.py"),
 ]
 
 col1, col2, col3 = st.columns(3)
@@ -420,12 +441,11 @@ for i, (key, color, num, title, desc, page) in enumerate(_KPIS):
             <div class="kpi-bdesc">{desc}</div>
         </div>
         """, unsafe_allow_html=True)
-        if st.button(f"● Voir l'analyse →", key=f"btn_{key}", use_container_width=True):
+        if st.button(f"Voir l'analyse", key=f"btn_{key}", use_container_width=True):
             st.switch_page(page)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Bouton carte menaces
 col_map, _, _ = st.columns(3)
 with col_map:
     st.markdown("""
@@ -433,11 +453,11 @@ with col_map:
       <div class="map-bnum">07</div>
       <div style="flex:1">
         <div class="map-btitle">Carte mondiale des menaces</div>
-        <div class="map-bdesc">Visualisation géographique des cyberattaques · Hotspots, origines et cibles par pays</div>
-        <div class="map-btags"><span class="map-btag">Temps réel</span><span class="map-btag">Géolocalisation</span></div>
+        <div class="map-bdesc">Visualisation geographique des cyberattaques -- Hotspots, origines et cibles par pays</div>
+        <div class="map-btags"><span class="map-btag">Temps reel</span><span class="map-btag">Geolocalisation</span></div>
       </div>
-      <div class="map-barrow">→</div>
+      <div class="map-barrow">&rarr;</div>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("● Voir la carte →", key="btn_map", use_container_width=True):
+    if st.button("Voir la carte", key="btn_map", use_container_width=True):
         st.switch_page("pages/7_Carte_Menaces.py")

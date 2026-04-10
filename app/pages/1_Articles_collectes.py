@@ -16,6 +16,10 @@ from db_connect import get_mart_k1, get_stg_articles, force_refresh
 
 st.set_page_config(page_title="KPI 1 - Articles", layout="wide")
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from sidebar_css import inject_sidebar_css
+inject_sidebar_css()
+
 # ── CSS global ────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>

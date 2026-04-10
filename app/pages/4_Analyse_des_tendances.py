@@ -18,6 +18,9 @@ from db_connect import get_mart_k4, force_refresh
 
 st.set_page_config(page_title="CyberPulse - KPI 4 Tendances", layout="wide")
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from sidebar_css import inject_sidebar_css
+inject_sidebar_css()
 
 # ── Helper : titre de section centré (évite la duplication HTML) ──────────────
 def _section_title(text: str, size: str = "1.4rem"):
