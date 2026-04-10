@@ -1,5 +1,6 @@
 # db_connect.py -- Connexion PostgreSQL partagee entre toutes les pages KPI
 # Cache TTL 120s via @st.cache_data -- force_refresh() vide tout
+# Dual mode : st.secrets (Streamlit Cloud) ou .env (Docker local)
 
 import os
 
@@ -10,16 +11,24 @@ from sqlalchemy import create_engine, text
 
 load_dotenv()
 
-DB_USER     = os.getenv("POSTGRES_USER",     "cyberpulse")
-DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "cyberpulse123")
-DB_NAME     = os.getenv("POSTGRES_DB",       "cyberpulse_db")
-DB_HOST     = os.getenv("POSTGRES_HOST",     "localhost")
-DB_PORT     = os.getenv("POSTGRES_PORT",     "5432")
-
-DATABASE_URL = (
-    f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}"
-    f"@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-)
+# -- Connexion dual Cloud / Local
+if "postgres" in st.secrets:
+    s = st.secrets["postgres"]
+    DATABASE_URL = (
+        f"postgresql+psycopg2://{s['user']}:{s['password']}"
+        f"@{s['host']}:{s.get('port', 5432)}/{s['dbname']}"
+        f"?sslmode={s.get('sslmode', 'require')}"
+    )
+else:
+    DB_USER     = os.getenv("POSTGRES_USER",     "cyberpulse")
+    DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "cyberpulse123")
+    DB_NAME     = os.getenv("POSTGRES_DB",       "cyberpulse_db")
+    DB_HOST     = os.getenv("POSTGRES_HOST",     "localhost")
+    DB_PORT     = os.getenv("POSTGRES_PORT",     "5432")
+    DATABASE_URL = (
+        f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}"
+        f"@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    )
 
 
 @st.cache_resource
