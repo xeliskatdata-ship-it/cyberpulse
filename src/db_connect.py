@@ -144,9 +144,26 @@ def get_mart_k6():
         ORDER BY nb_mentions DESC
     """)
 
+@st.cache_data(ttl=120)
+def get_sidebar_counts():
+    with get_engine().connect() as conn:
+        counts = {}
+        for key, sql in [
+            ("k1", "SELECT COALESCE(SUM(nb_articles),0) FROM mart_k1"),
+            ("k2", "SELECT COUNT(*) FROM mart_k2 WHERE period_days=7 AND occurrences>0"),
+            ("k3", "SELECT COUNT(DISTINCT category) FROM mart_k3"),
+            ("k5", "SELECT COALESCE(SUM(nb_alertes),0) FROM mart_k5"),
+            ("k6", "SELECT COUNT(*) FROM mart_k6"),
+        ]:
+            try:
+                counts[key] = conn.execute(text(sql)).scalar()
+            except Exception:
+                pass
+    return counts
 
 def force_refresh():
     # Vide le cache Streamlit -- force rechargement depuis PostgreSQL
     for fn in (get_mart_k1, get_mart_k2, get_mart_k3, get_mart_k4,
                get_mart_k5, get_mart_k6, get_stg_articles, get_articles_by_keyword):
         fn.clear()
+        
