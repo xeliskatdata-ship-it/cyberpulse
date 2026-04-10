@@ -1,5 +1,6 @@
 # 2_kpi2_Mots_cles.py -- KPI 2 : Suivi des mots-cles cyber
-# Heatmap categorie x periode, scatter interactif, compteurs animes
+# Heatmap categorie x periode, lollipop fiabilite signal, compteurs animes
+# v3 : ECG vert PT=5, bar labels, lollipop avec details chiffres+sources
 
 import os
 import sys
@@ -48,7 +49,7 @@ letter-spacing:.15em;text-transform:uppercase;color:#22c55e;background:rgba(34,1
 border:1px solid rgba(34,197,94,.2);border-radius:4px;padding:3px 10px;margin-bottom:14px;}
 .page-title{text-align:center;font-size:3rem;font-weight:700;color:#a855f7;margin-bottom:20px;line-height:1.2;}
 .desc-box{background:rgba(15,20,34,0.85);border:1px solid #1e2a42;border-left:3px solid #22c55e;
-border-radius:8px;padding:20px 24px;margin-bottom:24px;color:#94a3b8;font-size:1.5rem;
+border-radius:8px;padding:14px 20px;margin-bottom:24px;color:#94a3b8;font-size:0.75rem;
 line-height:1.8;text-align:center;max-width:900px;margin-left:auto;margin-right:auto;}
 .badge-live{display:inline-flex;align-items:center;gap:6px;font-family:'Roboto Mono',monospace;
 font-size:1rem;letter-spacing:.08em;color:#22c55e;background:rgba(34,197,94,.08);
@@ -67,10 +68,10 @@ div[data-testid="stButton"] button:hover{background:rgba(34,197,94,0.25)!importa
 </style>
 """, unsafe_allow_html=True)
 
-# ── ECG (minifie -- meme animation que les autres pages) ──────────────────────
+# ── ECG (point reduit PT=10) ──────────────────────────────────────────────────
 components.html("""
 <script>
-(function(){var p=window.parent.document,w=window.parent,PT=24,TR=270,SP=2;
+(function(){var p=window.parent.document,w=window.parent,PT=5,TR=270,SP=2;
 function ecg(x,H){var m=PT+10,a=H/2-m,mod=x%220,r;if(mod<70)r=Math.sin(mod*.05)*5;
 else if(mod<80)r=(mod-70)*13;else if(mod<85)r=130-(mod-80)*55;else if(mod<90)r=-145+(mod-85)*32;
 else if(mod<100)r=-25+(mod-90)*3;else if(mod<115)r=Math.sin((mod-100)*.4)*9;
@@ -104,12 +105,12 @@ h.push({x:ex%W,y:H/2-ecg(ex,H)});ex+=SP;
 var mx=Math.round(TR/SP);if(h.length>mx)h.shift();
 if(h.length>1){for(var k=1;k<h.length;k++){var pr=k/h.length,al=pr*.85,
 sp=Math.abs(h[k].y-H/2)>H*.08;ctx.beginPath();ctx.moveTo(h[k-1].x,h[k-1].y);
-ctx.lineTo(h[k].x,h[k].y);ctx.strokeStyle=sp?'rgba(168,85,247,'+al+')':'rgba(59,130,246,'+(al*.6)+')';
+ctx.lineTo(h[k].x,h[k].y);ctx.strokeStyle=sp?'rgba(57,255,20,'+al+')':'rgba(59,130,246,'+(al*.6)+')';
 ctx.lineWidth=sp?3.5:1.8;ctx.stroke();}
-var hd=h[h.length-1];var gl=ctx.createRadialGradient(hd.x,hd.y,0,hd.x,hd.y,PT*4);
-gl.addColorStop(0,'rgba(168,85,247,.55)');gl.addColorStop(1,'rgba(168,85,247,0)');
-ctx.fillStyle=gl;ctx.fillRect(hd.x-PT*4,hd.y-PT*4,PT*8,PT*8);
-ctx.beginPath();ctx.arc(hd.x,hd.y,PT,0,Math.PI*2);ctx.fillStyle='rgba(220,170,255,1)';ctx.fill();}
+var hd=h[h.length-1];var gl=ctx.createRadialGradient(hd.x,hd.y,0,hd.x,hd.y,PT*3);
+gl.addColorStop(0,'rgba(57,255,20,.45)');gl.addColorStop(1,'rgba(57,255,20,0)');
+ctx.fillStyle=gl;ctx.fillRect(hd.x-PT*3,hd.y-PT*3,PT*6,PT*6);
+ctx.beginPath();ctx.arc(hd.x,hd.y,PT,0,Math.PI*2);ctx.fillStyle='rgba(57,255,20,0.9)';ctx.fill();}
 requestAnimationFrame(draw);}draw();return function(){alive=false;};}
 var s=go();setInterval(function(){if(!p.getElementById('ecg-bg')){s&&s();s=go();}},2000);
 p.addEventListener('visibilitychange',function(){if(!p.hidden){s&&s();s=go();}});})();
@@ -121,8 +122,8 @@ st.markdown('<div style="text-align:center"><div class="kpi-tag">KPI 2</div></di
 st.markdown('<div class="page-title">Suivi des mots-clés</div>', unsafe_allow_html=True)
 st.markdown("""
 <div class="desc-box">
-    Cliquez sur une bulle du scatter pour afficher les articles associés avec leurs liens.<br>
-    Cellule grise sur la heatmap : 0 occurrence sur la période sélectionnée.
+    Cliquez sur un point du lollipop pour afficher les articles associés avec leurs liens.<br>
+    Chaque ligne montre les occurrences, articles et sources distinctes.
 </div>
 """, unsafe_allow_html=True)
 
@@ -197,7 +198,6 @@ CATEGORIES = {
 PERIODS    = {3: "3j", 7: "7j", 15: "15j", 30: "30j"}
 CAT_COLORS = {k: v["color"] for k, v in CATEGORIES.items()}
 
-# Map chaque keyword vers sa categorie
 kw_cat_map = {
     kw: cat_key
     for cat_key, cat in CATEGORIES.items()
@@ -300,16 +300,21 @@ fig = px.bar(
     df_chart, x="occurrences", y="keyword", orientation="h", color="category",
     color_discrete_map=CAT_COLORS,
     labels={"occurrences": "Cas", "keyword": "", "category": "Catégorie"},
+    text="occurrences",
+)
+fig.update_traces(
+    textposition="outside",
+    textfont=dict(size=14, color="#cbd5e1", family="Roboto Mono"),
+    marker_line_width=0,
 )
 fig.update_layout(
     paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(5,10,20,0.6)",
     font=dict(family="Roboto", color="#94a3b8", size=18),
-    xaxis=dict(gridcolor="#1e2a42", tickfont=dict(size=18, color="#94a3b8"), title_font=dict(size=20)),
-    yaxis=dict(gridcolor="rgba(0,0,0,0)", tickfont=dict(size=18, color="#cbd5e1")),
-    legend=dict(font=dict(size=18), title_text="Catégorie", title_font=dict(size=18)),
-    margin=dict(l=20, r=20, t=60, b=20), height=max(500, top_n * 40),
+    xaxis=dict(gridcolor="#1e2a42", tickfont=dict(size=16, color="#94a3b8"), title_font=dict(size=18), showgrid=False),
+    yaxis=dict(gridcolor="rgba(0,0,0,0)", tickfont=dict(size=16, color="#cbd5e1")),
+    legend=dict(font=dict(size=16), title_text="Catégorie", title_font=dict(size=16)),
+    margin=dict(l=20, r=60, t=60, b=20), height=max(500, top_n * 40),
 )
-fig.update_traces(marker_line_width=0)
 st.plotly_chart(fig, use_container_width=True)
 
 # ── Heatmap categorie x periode ───────────────────────────────────────────────
@@ -325,13 +330,12 @@ cat_labels  = [CATEGORIES[k]["label"] for k in cat_keys]
 period_keys = sorted(PERIODS.keys())
 period_lbls = [PERIODS[p] for p in period_keys]
 
-# Matrice occurrences
 heat_z = []
 for ck in cat_keys:
     kws = [kw for sub in CATEGORIES[ck]["subcats"].values() for kw in sub]
     heat_z.append([sum(counts_all[p].get(kw, 0) for kw in kws) for p in period_keys])
 
-# Delta acceleration : rythme 3j vs moyenne 7j ramenee sur 3j
+# Delta acceleration
 delta_col = []
 for ck in cat_keys:
     kws      = [kw for sub in CATEGORIES[ck]["subcats"].values() for kw in sub]
@@ -350,7 +354,6 @@ fig_heat = go.Figure(go.Heatmap(
     colorbar=dict(tickfont=dict(color="#94a3b8", size=14), outlinewidth=0, bgcolor="rgba(0,0,0,0)"),
 ))
 
-# Fleches delta a droite
 for i, (label, delta) in enumerate(zip(cat_labels, delta_col)):
     arrow, color = ("↑","#22c55e") if delta > 0.1 else ("↓","#ef4444") if delta < -0.1 else ("→","#94a3b8")
     fig_heat.add_annotation(
@@ -375,90 +378,123 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ── Scatter : qualite du signal ───────────────────────────────────────────────
+# ── Lollipop : fiabilite du signal ─────────────────────────────────────────────
 st.markdown("<br>", unsafe_allow_html=True)
 st.markdown(
     f"<div style='text-align:center;font-size:2.2rem;color:#a855f7;font-weight:700;padding-bottom:12px'>"
-    f"Qualité du signal — {n_days}j</div>",
+    f"Fiabilité du signal — {n_days}j</div>",
     unsafe_allow_html=True,
 )
 
-scatter_rows = [
-    {"keyword": kw, "occurrences": v, "article_count": art_counts.get(kw, 0), "category": kw_cat_map.get(kw, "inconnu")}
+lollipop_rows = [
+    {"keyword": kw, "occurrences": v, "article_count": art_counts.get(kw, 0),
+     "source_count": src_counts.get(kw, 0), "category": kw_cat_map.get(kw, "inconnu")}
     for kw, v in counts.items() if v > 0
 ]
-df_sc = pd.DataFrame(scatter_rows)
+df_lp = pd.DataFrame(lollipop_rows).sort_values("occurrences", ascending=True)
 
-if not df_sc.empty:
-    med_occ = df_sc["occurrences"].median()
-    med_art = df_sc["article_count"].median()
-    x_max   = df_sc["occurrences"].max() * 1.12
-    y_max   = df_sc["article_count"].max() * 1.12
-    occ_q80 = df_sc["occurrences"].quantile(0.80)
+if not df_lp.empty:
+    # Top 25 pour lisibilite
+    df_lp = df_lp.tail(25)
+    max_occ = df_lp["occurrences"].max()
 
-    fig_sc = go.Figure()
+    fig_lp = go.Figure()
 
-    # Quadrants colores en fond
-    for x0, x1, y0, y1, fill in [
-        (med_occ, x_max, med_art, y_max, "rgba(168,85,247,0.07)"),
-        (med_occ, x_max, 0, med_art, "rgba(239,68,68,0.05)"),
-        (0, med_occ, med_art, y_max, "rgba(59,130,246,0.05)"),
-        (0, med_occ, 0, med_art, "rgba(15,20,34,0.0)"),
-    ]:
-        fig_sc.add_shape(type="rect", x0=x0, x1=x1, y0=y0, y1=y1, fillcolor=fill, line_width=0, layer="below")
-
-    # Un trace par categorie
-    for cat_key, cat_color in CAT_COLORS.items():
-        sub = df_sc[df_sc["category"] == cat_key]
-        if sub.empty:
-            continue
-        size_norm = (sub["occurrences"] / df_sc["occurrences"].max() * 38 + 6).tolist()
-        labels    = sub["keyword"].where(sub["occurrences"] >= occ_q80, "").tolist()
-        fig_sc.add_trace(go.Scatter(
-            x=sub["occurrences"], y=sub["article_count"],
-            mode="markers+text", name=CATEGORIES[cat_key]["label"],
-            marker=dict(size=size_norm, color=cat_color, line=dict(width=0), sizemode="diameter"),
-            text=labels, textposition="top center",
-            textfont=dict(size=11, color="#e2e8f0", family="Roboto"),
-            hovertemplate="<b>%{customdata}</b><br>Occurrences : %{x}<br>Articles distincts : %{y}<extra></extra>",
-            customdata=sub["keyword"].tolist(),
+    # Tiges horizontales (lignes fines)
+    for _, row in df_lp.iterrows():
+        cat_color = CAT_COLORS.get(row["category"], "#495b73")
+        fig_lp.add_trace(go.Scatter(
+            x=[0, row["occurrences"]],
+            y=[row["keyword"], row["keyword"]],
+            mode="lines",
+            line=dict(color=cat_color, width=2),
+            showlegend=False,
+            hoverinfo="skip",
         ))
 
-    fig_sc.add_hline(y=med_art, line_dash="dash", line_color="rgba(148,163,184,0.22)", line_width=1)
-    fig_sc.add_vline(x=med_occ, line_dash="dash", line_color="rgba(148,163,184,0.22)", line_width=1)
+    # Points (cercles) au bout + hover detaille
+    for cat_key, cat_color in CAT_COLORS.items():
+        sub = df_lp[df_lp["category"] == cat_key]
+        if sub.empty:
+            continue
+        fig_lp.add_trace(go.Scatter(
+            x=sub["occurrences"],
+            y=sub["keyword"],
+            mode="markers",
+            name=CATEGORIES[cat_key]["label"],
+            marker=dict(size=14, color=cat_color,
+                        line=dict(width=1.5, color="rgba(255,255,255,0.2)")),
+            customdata=list(zip(
+                sub["keyword"].tolist(),
+                sub["article_count"].tolist(),
+                sub["source_count"].tolist(),
+                sub["category"].tolist(),
+            )),
+            hovertemplate=(
+                "<b>%{customdata[0]}</b><br>"
+                "Occurrences : %{x}<br>"
+                "Articles : %{customdata[1]}<br>"
+                "Sources : %{customdata[2]}<br>"
+                "Catégorie : %{customdata[3]}"
+                "<extra></extra>"
+            ),
+        ))
 
-    # Annotations quadrants
-    qs = dict(showarrow=False, font=dict(size=12, color="rgba(148,163,184,0.50)", family="Roboto"), xanchor="center", yanchor="middle")
-    fig_sc.add_annotation(x=x_max*.78, y=y_max*.93, text="Signal fort & large", **qs)
-    fig_sc.add_annotation(x=x_max*.78, y=y_max*.07, text="Sur-représenté (peu d'articles)", **qs)
-    fig_sc.add_annotation(x=x_max*.18, y=y_max*.93, text="Signal large & discret", **qs)
-    fig_sc.add_annotation(x=x_max*.18, y=y_max*.07, text="Signal faible", **qs)
+    # Annotations chiffres a droite de chaque point
+    for _, row in df_lp.iterrows():
+        cat_color = CAT_COLORS.get(row["category"], "#64748b")
+        occ = int(row["occurrences"])
+        art = int(row["article_count"])
+        src = int(row["source_count"])
+        fig_lp.add_annotation(
+            x=row["occurrences"],
+            y=row["keyword"],
+            text=f"<b>{occ}</b> <span style='color:#94a3b8'>· {art} art · {src} src</span>",
+            showarrow=False,
+            xanchor="left",
+            xshift=14,
+            font=dict(size=12, color="#cbd5e1", family="Roboto Mono"),
+        )
 
-    fig_sc.update_layout(
+    fig_lp.update_layout(
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(5,10,20,0.6)",
-        font=dict(family="Roboto", color="#94a3b8", size=16),
-        xaxis=dict(gridcolor="#1e2a42", tickfont=dict(size=16, color="#94a3b8"),
-                   title="Occurrences (mentions)", title_font=dict(size=18), range=[0, x_max]),
-        yaxis=dict(gridcolor="#1e2a42", tickfont=dict(size=16, color="#94a3b8"),
-                   title="Articles distincts", title_font=dict(size=18), range=[0, y_max]),
-        legend=dict(font=dict(size=16), title_text="Catégorie", title_font=dict(size=16)),
-        margin=dict(l=20, r=20, t=20, b=20), height=540,
+        font=dict(family="Roboto", color="#94a3b8", size=14),
+        xaxis=dict(
+            gridcolor="#1e2a42", tickfont=dict(size=14, color="#94a3b8"),
+            title="Occurrences (mentions)", title_font=dict(size=16, color="#94a3b8"),
+            zeroline=False, range=[0, max_occ * 1.45],
+        ),
+        yaxis=dict(
+            gridcolor="rgba(0,0,0,0)", tickfont=dict(size=14, color="#cbd5e1"),
+        ),
+        legend=dict(
+            font=dict(size=14), title_text="Catégorie", title_font=dict(size=14),
+            bgcolor="rgba(15,20,34,0.8)", bordercolor="#1e2a42", borderwidth=1,
+            orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5,
+        ),
+        margin=dict(l=20, r=120, t=50, b=40),
+        height=max(500, len(df_lp) * 32),
     )
 
-    # Rendu scatter avec capture du clic
-    event = st.plotly_chart(fig_sc, use_container_width=True, on_select="rerun", key="scatter_k2")
+    event = st.plotly_chart(fig_lp, use_container_width=True, on_select="rerun", key="lollipop_k2")
 
     st.markdown(
-        "<div style='text-align:center;font-size:0.95rem;color:#64748b;margin-top:-10px'>"
-        "Axe X : nombre de mentions — Axe Y : articles sources distincts. "
-        "Les labels affichent les mots-clés du top 20%. "
-        "Cliquez sur une bulle pour voir les articles associés.</div>",
+        "<div style='text-align:center;font-size:0.85rem;color:#64748b;margin-top:-10px'>"
+        "Longueur = occurrences · <b>art</b> = articles distincts · <b>src</b> = sources distinctes. "
+        "Plus un mot-clé est couvert par des sources variées, plus le signal est fiable. "
+        "Cliquez sur un point pour voir les articles.</div>",
         unsafe_allow_html=True,
     )
 
     # ── Panel articles au clic ────────────────────────────────────────────────
     points     = (event.selection or {}).get("points", [])
-    clicked_kw = points[0].get("customdata", "") if points else ""
+    clicked_kw = ""
+    if points:
+        cd = points[0].get("customdata", "")
+        if isinstance(cd, (list, tuple)) and len(cd) > 0:
+            clicked_kw = cd[0]
+        elif isinstance(cd, str):
+            clicked_kw = cd
 
     if clicked_kw:
         st.markdown("<br>", unsafe_allow_html=True)
@@ -499,4 +535,4 @@ border-radius:8px;padding:14px 18px;margin-bottom:10px">
 </div>""", unsafe_allow_html=True)
 
 else:
-    st.info("Aucune donnée disponible pour le scatter sur cette période.")
+    st.info("Aucune donnée disponible pour cette période.")
