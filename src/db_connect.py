@@ -15,6 +15,11 @@ load_dotenv()
 WINDOW_MAP_DAYS = 90   # Carte des menaces (patterns geopolitiques)
 WINDOW_KPI_DAYS = 30   # Pages KPI (indicateurs operationnels)
 
+# Fenetre de chargement SQL -- borne l'egress des marts temporelles
+# Aucun KPI ne regarde au-dela de 90j -> on coupe la remontee a la source
+LOAD_WINDOW_DAYS  = 90
+LOAD_WINDOW_WEEKS = 13   # mart_k5 est agrege en semaines
+
 # TTL cache aligne sur le cron horaire (marts refresh max 1x/h)
 # Etait a 120s -> 30 rechargements inutiles par heure -> quota Neon exploser
 CACHE_TTL = 3600
@@ -45,9 +50,9 @@ def get_engine():
 
 
 # -- Helper pour eviter la repetition query -> df -> cast date --
-def _query(sql, date_cols=None):
+def _query(sql, params=None, date_cols=None):
     with get_engine().connect() as conn:
-        df = pd.read_sql(text(sql), conn)
+        df = pd.read_sql(text(sql), conn, params=params or {})
     for col in (date_cols or []):
         if col in df.columns:
             df[col] = pd.to_datetime(df[col])
@@ -56,12 +61,14 @@ def _query(sql, date_cols=None):
 
 @st.cache_data(ttl=CACHE_TTL)
 def get_mart_k1():
+    # Fenetre glissante 90j -> evite de tirer 1 an d'historique a chaque refresh
     return _query("""
         SELECT published_date, source, nb_articles
         FROM mart_k1
         WHERE published_date IS NOT NULL
+          AND published_date >= CURRENT_DATE - INTERVAL '1 day' * :days
         ORDER BY published_date DESC
-    """, date_cols=["published_date"])
+    """, params={"days": LOAD_WINDOW_DAYS}, date_cols=["published_date"])
 
 
 @st.cache_data(ttl=CACHE_TTL)
@@ -129,6 +136,7 @@ def get_articles_by_keyword(keyword, period_days=7):
 
 @st.cache_data(ttl=CACHE_TTL)
 def get_mart_k3():
+    # Pas de colonne date dans mart_k3 -> pas de fenetre, mais table petite par construction
     return _query("""
         SELECT category, source, nb_articles
         FROM mart_k3
@@ -138,24 +146,29 @@ def get_mart_k3():
 
 @st.cache_data(ttl=CACHE_TTL)
 def get_mart_k4():
+    # Fenetre 90j idem K1
     return _query("""
         SELECT published_date, category, nb_mentions
         FROM mart_k4
+        WHERE published_date >= CURRENT_DATE - INTERVAL '1 day' * :days
         ORDER BY published_date DESC, nb_mentions DESC
-    """, date_cols=["published_date"])
+    """, params={"days": LOAD_WINDOW_DAYS}, date_cols=["published_date"])
 
 
 @st.cache_data(ttl=CACHE_TTL)
 def get_mart_k5():
+    # Fenetre 13 semaines (~90j) - agrege hebdomadaire
     return _query("""
         SELECT semaine, category, nb_alertes
         FROM mart_k5
+        WHERE semaine >= CURRENT_DATE - INTERVAL '1 week' * :weeks
         ORDER BY semaine DESC, nb_alertes DESC
-    """, date_cols=["semaine"])
+    """, params={"weeks": LOAD_WINDOW_WEEKS}, date_cols=["semaine"])
 
 
 @st.cache_data(ttl=CACHE_TTL)
 def get_mart_k6():
+    # Petite table (liste de CVE + compteurs) -> pas de fenetre necessaire
     return _query("""
         SELECT cve, nb_mentions
         FROM mart_k6
@@ -165,20 +178,22 @@ def get_mart_k6():
 
 @st.cache_data(ttl=CACHE_TTL)
 def get_sidebar_counts():
-    with get_engine().connect() as conn:
-        counts = {}
-        for key, sql in [
-            ("k1", "SELECT COALESCE(SUM(nb_articles),0) FROM mart_k1"),
-            ("k2", "SELECT COUNT(*) FROM mart_k2 WHERE period_days=7 AND occurrences>0"),
-            ("k3", "SELECT COUNT(DISTINCT category) FROM mart_k3"),
-            ("k5", "SELECT COALESCE(SUM(nb_alertes),0) FROM mart_k5"),
-            ("k6", "SELECT COUNT(*) FROM mart_k6"),
-        ]:
-            try:
-                counts[key] = conn.execute(text(sql)).scalar()
-            except Exception:
-                pass
-    return counts
+    # Mutualise en 1 seule requete -> 1 round-trip au lieu de 5 par session x page
+    sql = """
+        SELECT
+            (SELECT COALESCE(SUM(nb_articles), 0) FROM mart_k1) AS k1,
+            (SELECT COUNT(*) FROM mart_k2 WHERE period_days = 7 AND occurrences > 0) AS k2,
+            (SELECT COUNT(DISTINCT category) FROM mart_k3) AS k3,
+            (SELECT COALESCE(SUM(nb_alertes), 0) FROM mart_k5) AS k5,
+            (SELECT COUNT(*) FROM mart_k6) AS k6
+    """
+    try:
+        with get_engine().connect() as conn:
+            row = conn.execute(text(sql)).mappings().first()
+        return dict(row) if row else {}
+    except Exception:
+        # Fallback : si une table manque (dbt pas encore lance), on retourne ce qui a marche
+        return {}
 
 
 def force_refresh():
