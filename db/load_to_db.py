@@ -1,6 +1,6 @@
-# load_to_db.py -- Charge les CSV raw dans PostgreSQL
+# load_to_db.py -- Charge les CSV raw dans PostgreSQL (mode batch, low egress)
 # Usage : python db/load_to_db.py
-# Seule raw_articles est alimentee ici — stg + mart sont geres par dbt
+# Seule raw_articles est alimentee ici -- stg + mart sont geres par dbt
 
 import glob
 import logging
@@ -8,6 +8,7 @@ import os
 
 import pandas as pd
 from dotenv import load_dotenv
+from psycopg2.extras import execute_values
 from sqlalchemy import create_engine, text
 
 load_dotenv()
@@ -29,14 +30,16 @@ _MISSING = [k for k, v in {
 if _MISSING:
     raise EnvironmentError(
         f"Variables manquantes : {', '.join(_MISSING)}\n"
-        "Ajoutez-les dans docker-compose.yml (services airflow + streamlit)."
+        "Ajoutez-les dans les secrets GitHub Actions + Streamlit."
     )
 
 DATABASE_URL = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}?sslmode=require"
 
+RAW_COLS = ["source", "title", "description", "url", "published_at", "collected_at"]
+
 
 def _get_engine():
-    engine = create_engine(DATABASE_URL)
+    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
     log.info("Connexion PostgreSQL OK (%s:%s/%s)", DB_HOST, DB_PORT, DB_NAME)
@@ -44,75 +47,74 @@ def _get_engine():
 
 
 # ---------------------------------------------------
-# 1. RAW ARTICLES
+# 1. LECTURE + DEDUP INTRA-BATCH (pas de network)
 # ---------------------------------------------------
-RAW_COLS = ["source", "title", "description", "url", "published_at", "collected_at"]
-
-
-def _load_raw(engine):
-    files = glob.glob("data/raw/articles_*.csv")
+def _read_all_csv():
+    files = sorted(glob.glob("data/raw/articles_*.csv"))
     if not files:
         log.warning("Aucun fichier dans data/raw/")
-        return
+        return pd.DataFrame(columns=RAW_COLS)
 
-    total_ins = total_skip = 0
-
-    for fp in sorted(files):
-        df = pd.read_csv(fp, usecols=lambda c: c in RAW_COLS)
+    # Concat de tous les CSV en 1 seul DataFrame -> on evite les boucles
+    dfs = []
+    for fp in files:
+        d = pd.read_csv(fp, usecols=lambda c: c in RAW_COLS)
         for col in RAW_COLS:
-            if col not in df.columns:
-                df[col] = None
-        df = df[RAW_COLS]
+            if col not in d.columns:
+                d[col] = None
+        dfs.append(d[RAW_COLS])
+        log.info("read | %s : %d lignes", os.path.basename(fp), len(d))
 
-        # Nettoyer les NaN AVANT tout INSERT (Ransomware.live envoie url=NaN) -> indispensable, cela m'a bloqué lors du chargement dans streamlit
-        df = df.fillna('')
+    df = pd.concat(dfs, ignore_index=True)
 
-        # Dedup intra-fichier : sur (source, title) pour ne pas perdre les articles sans URL
-        df = df.drop_duplicates(subset=["source", "title"], keep="first")
+    # Ransomware.live envoie NaN sur url -> obligatoire avant INSERT (m'a bloque sur Streamlit)
+    df = df.fillna('')
 
-        ins = skip = 0
-        with engine.begin() as conn:
-            for _, row in df.iterrows():
-                try:
-                    # Dedup : url si present, sinon (source, title)
-                    if row['url'] and row['url'].strip():
-                        conn.execute(text("""
-                            INSERT INTO raw_articles
-                                (source, title, description, url, published_at, collected_at)
-                            SELECT
-                                :source, :title, :description, :url, :published_at, :collected_at
-                            WHERE NOT EXISTS (
-                                SELECT 1 FROM raw_articles
-                                WHERE url = :url
-                            )
-                        """), row.to_dict())
-                    else:
-                        # Articles sans URL : dedup sur (source, title)
-                        conn.execute(text("""
-                            INSERT INTO raw_articles
-                                (source, title, description, url, published_at, collected_at)
-                            SELECT
-                                :source, :title, :description, :url, :published_at, :collected_at
-                            WHERE NOT EXISTS (
-                                SELECT 1 FROM raw_articles
-                                WHERE source = :source AND title = :title
-                            )
-                        """), row.to_dict())
-                    ins += 1
-                except Exception as e:
-                    if skip == 0:
-                        log.error("Premiere erreur INSERT : %s", e)
-                    skip += 1
+    # Dedup intra-batch : URL si presente, sinon (source, title)
+    df['_key'] = df['url'].where(df['url'].str.strip() != '', df['source'] + '||' + df['title'])
+    df = df.drop_duplicates(subset=['_key'], keep='first').drop(columns=['_key'])
 
-        log.info("raw  | %s : %d inserees / %d ignorees", os.path.basename(fp), ins, skip)
-        total_ins  += ins
-        total_skip += skip
-
-    log.info("raw_articles total : %d inserees / %d ignorees", total_ins, total_skip)
+    log.info("concat + dedup intra-batch : %d lignes candidates", len(df))
+    return df
 
 
 # ---------------------------------------------------
-# 2. VERIFICATION
+# 2. BULK INSERT avec ON CONFLICT DO NOTHING
+#    -> Postgres gere la dedup cote serveur (via index uniques partiels)
+#    -> 1 seule requete par chunk au lieu de N
+# ---------------------------------------------------
+def _bulk_insert(df, engine, chunk_size=500):
+    if df.empty:
+        log.info("Rien a inserer.")
+        return 0
+
+    # Convertit le DF en liste de tuples (format execute_values)
+    rows = list(df[RAW_COLS].itertuples(index=False, name=None))
+
+    sql = """
+        INSERT INTO raw_articles (source, title, description, url, published_at, collected_at)
+        VALUES %s
+        ON CONFLICT DO NOTHING
+    """
+
+    raw = engine.raw_connection()
+    try:
+        cur = raw.cursor()
+        # execute_values groupe les lignes en 1 INSERT multi-values par page
+        # page_size = taille du batch, compromis memoire / taille requete
+        execute_values(cur, sql, rows, page_size=chunk_size)
+        inserted = cur.rowcount  # nb de lignes reellement inserees (hors conflits)
+        raw.commit()
+        cur.close()
+    finally:
+        raw.close()
+
+    log.info("bulk insert : %d nouvelles / %d ignorees (ON CONFLICT)", inserted, len(rows) - inserted)
+    return inserted
+
+
+# ---------------------------------------------------
+# 3. VERIFICATION (1 seul SELECT COUNT par table)
 # ---------------------------------------------------
 def _check_counts(engine):
     log.info("-" * 40)
@@ -134,11 +136,16 @@ def _check_counts(engine):
 # ---------------------------------------------------
 def main():
     log.info("=" * 40)
-    log.info("CyberPulse -- Chargement en base (raw uniquement)")
+    log.info("CyberPulse -- Chargement en base (batch mode, low egress)")
     log.info("=" * 40)
 
     engine = _get_engine()
-    _load_raw(engine)
+    df = _read_all_csv()
+    if df.empty:
+        log.info("Rien a charger. Fin.")
+        return
+
+    _bulk_insert(df, engine)
     _check_counts(engine)
 
     log.info("Chargement termine.")
