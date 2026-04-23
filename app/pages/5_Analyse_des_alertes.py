@@ -67,7 +67,7 @@ _sb_target = {"en": "Target vector", "fr": "Vecteur cible"}
 
 with st.sidebar:
     st.markdown(_sb_title[lang])
-    lookback = st.selectbox(_sb_window[lang], options=[7, 14, 30, 90], index=2)
+    lookback = st.selectbox(_sb_window[lang], options=[3, 7, 14, 30, 90], index=3)
     cutoff_date = df_raw['semaine'].max() - timedelta(days=lookback)
     df = df_raw[df_raw['semaine'] >= cutoff_date].copy()
     cats_all = sorted(df['category'].unique())
@@ -112,7 +112,8 @@ with col_l:
             ticktext=['1', '10', '100', '1K+'],    # affichage des vraies valeurs
         ),
     ))
-    fig_heat.update_xaxes(tickformat="%d/%m/%y")
+    # dtick=604800000 ms (= 7 jours) -> affiche 1 date par semaine (pas de dates sautees)
+    fig_heat.update_xaxes(tickformat="%d/%m/%y", dtick=604800000)
     fig_heat.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(5,10,20,0.4)",
         font=dict(family="JetBrains Mono", size=11, color="#c8d6e5"), margin=dict(t=10, b=20, l=10, r=10))
     st.plotly_chart(fig_heat, use_container_width=True)
