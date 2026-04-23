@@ -5,6 +5,7 @@ import os, sys, pathlib
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
+from datetime import datetime
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent.parent / "src"))
 from db_connect import get_mart_k6, force_refresh
@@ -32,6 +33,14 @@ st.markdown("""
 .severity-HIGH { color: #f59e0b; font-weight: 600; }
 .severity-MEDIUM { color: #00d4ff; font-weight: 600; }
 a { text-decoration: none; color: inherit; }
+.snapshot-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+    color: #7a9cc8; background: rgba(10,22,40,0.6);
+    border: 1px solid rgba(0,212,255,0.12); border-radius: 20px;
+    padding: 5px 14px; margin-bottom: 12px;
+}
+.snapshot-dot { width: 6px; height: 6px; border-radius: 50%; background: #00d4ff; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -54,8 +63,22 @@ nvd_data_sim = {row['CVE']: {
 } for i, row in agg.iterrows()}
 
 # ── HEADER ───────────────────────────────────────────────────────────────────
-_title = {"en": "Most mentioned CVEs", "fr": "CVEs les plus mentionnees"}
+# Titre enrichi : on precise la fenetre d'agregation -> pas de malentendu "snapshot sans date"
+_title = {
+    "en": "Most mentioned CVEs (rolling 30-day window)",
+    "fr": "CVEs les plus mentionnees (fenetre glissante 30 jours)",
+}
 st.markdown(f'<div class="page-title">{_title[lang]}</div>', unsafe_allow_html=True)
+
+# Badge snapshot : horodatage du chargement pour materialiser la nature "photo a l'instant T"
+_snap = {"en": "Snapshot", "fr": "Instantane"}
+_updated = {"en": "updated", "fr": "mis a jour"}
+load_ts = datetime.now().strftime("%d/%m/%Y %H:%M")
+st.markdown(
+    f'<div class="snapshot-badge"><span class="snapshot-dot"></span>'
+    f'{_snap[lang]} — {_updated[lang]} {load_ts}</div>',
+    unsafe_allow_html=True,
+)
 
 col_a, col_b = st.columns([1, 1])
 with col_a:
