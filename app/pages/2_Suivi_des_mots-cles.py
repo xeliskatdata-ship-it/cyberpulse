@@ -25,14 +25,37 @@ st.markdown(f'<div class="page-title">{_title[lang]}</div>', unsafe_allow_html=T
 # ── DATA ─────────────────────────────────────────────────────────────────────
 try:
     df_raw = get_mart_k2()
-    v3 = df_raw[df_raw['period_days'] == 3].copy()
-    v15 = df_raw[df_raw['period_days'] == 15][['keyword', 'occurrences']].rename(columns={'occurrences':'occ_15j'})
-    drift_df = pd.merge(v3, v15, on='keyword', how='left').fillna(0)
-    drift_df['acceleration'] = (drift_df['occurrences'] + 1) / ((drift_df['occ_15j'] / 5) + 1)
-    if 'category' not in drift_df.columns:
-        drift_df['category'] = 'Threats'
+    # Detection dynamique des periodes dispos dans la mart -> pas de hardcode risque
+    available = sorted(df_raw['period_days'].unique().tolist())
+    baseline = max(available)                                  # periode la + longue = reference historique
+    short_periods = [p for p in available if p != baseline]
+    if not short_periods:                                      # fallback si une seule periode dans la mart
+        short_periods = [baseline]
 except Exception as e:
     st.error(f"Data error: {e}"); st.stop()
+
+# ── FILTRE PÉRIODE ───────────────────────────────────────────────────────────
+_period_lbl = {"en": "Analysis period:", "fr": "Periode d'analyse :"}
+_fmt = {"en": lambda p: f"Last {p} days", "fr": lambda p: f"{p} derniers jours"}
+
+_, col_p, _ = st.columns([1, 1, 1])
+with col_p:
+    default_period = 3 if 3 in short_periods else short_periods[0]
+    selected_period = st.selectbox(
+        _period_lbl[lang],
+        options=short_periods,
+        format_func=_fmt[lang],
+        index=short_periods.index(default_period),
+    )
+
+# Construction drift_df en fonction de la periode choisie
+v_current = df_raw[df_raw['period_days'] == selected_period].copy()
+v_base = df_raw[df_raw['period_days'] == baseline][['keyword', 'occurrences']].rename(columns={'occurrences': 'occ_base'})
+drift_df = pd.merge(v_current, v_base, on='keyword', how='left').fillna(0)
+# Acceleration normalisee par jour : ratio quotidien courant / quotidien baseline
+drift_df['acceleration'] = (drift_df['occurrences'] / selected_period + 1) / (drift_df['occ_base'] / baseline + 1)
+if 'category' not in drift_df.columns:
+    drift_df['category'] = 'Threats'
 
 # ── METRICS ──────────────────────────────────────────────────────────────────
 nb_mots_cles = len(drift_df)
@@ -74,9 +97,10 @@ with f_col:
 
 df_filtered = drift_df[drift_df['acceleration'] >= min_accel]
 
+# Palette assombrie : gradient cyber muted (bleu marine -> violet profond -> cyan sombre)
 fig_tree = px.treemap(df_filtered, path=[px.Constant("Cyber Overview"), 'category', 'keyword'],
     values='occurrences', color='occurrences',
-    color_continuous_scale=['#050a14', '#3b82f6', '#a855f7', '#00d4ff'])
+    color_continuous_scale=['#050a14', '#1e3a8a', '#4c1d95', '#0e7490'])
 fig_tree.update_layout(margin=dict(t=0, l=0, r=0, b=0),
     paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(5,10,20,0.4)",
     font=dict(family="JetBrains Mono", size=11, color="#c8d6e5"))
@@ -86,8 +110,8 @@ if not df_filtered.empty:
     top_accel_row = df_filtered.sort_values('acceleration', ascending=False).iloc[0]
     # keyword = terme technique, jamais traduit
     _ins1 = {
-        "en": f"<b>Velocity analysis:</b> Keyword <b>{top_accel_row['keyword']}</b> has the highest acceleration ({top_accel_row['acceleration']:.2f}x), indicating an emerging trend or active campaign detected over the last 72h.",
-        "fr": f"<b>Analyse de velocite :</b> Le mot-cle <b>{top_accel_row['keyword']}</b> presente la plus forte acceleration ({top_accel_row['acceleration']:.2f}x), indiquant une tendance emergente ou une campagne active detectee sur les dernieres 72h.",
+        "en": f"<b>Velocity analysis:</b> Keyword <b>{top_accel_row['keyword']}</b> has the highest acceleration ({top_accel_row['acceleration']:.2f}x), indicating an emerging trend or active campaign detected over the last {selected_period} days.",
+        "fr": f"<b>Analyse de velocite :</b> Le mot-cle <b>{top_accel_row['keyword']}</b> presente la plus forte acceleration ({top_accel_row['acceleration']:.2f}x), indiquant une tendance emergente ou une campagne active detectee sur les {selected_period} derniers jours.",
     }
     st.markdown(f'<div class="insight-box">{_ins1[lang]}</div>', unsafe_allow_html=True)
 

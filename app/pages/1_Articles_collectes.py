@@ -60,7 +60,7 @@ trend_df = pd.merge(vol_24h, vol_hist, on='source', how='left').fillna(0)
 trend_df['velocity_score'] = (trend_df['today'] + 1) / (trend_df['avg_daily'] + 1)
 
 # ── RADAR VÉLOCITÉ ────────────────────────────────────────────────────────────
-_radar_title = {"en": "Emergence radar (last 24h)", "fr": "Radar d'emergence (dernieres 24h)"}
+_radar_title = {"en": "Emergence radar (last 24h)", "fr": "Radar d'emergence (3 derniers jours)"}
 st.markdown(f'<div class="section-title">{_radar_title[lang]}</div>', unsafe_allow_html=True)
 
 _x_label = {"en": "Article volume", "fr": "Volume articles"}
@@ -81,9 +81,24 @@ st.plotly_chart(fig_radar, use_container_width=True)
 
 if not trend_df.empty:
     top_accel = trend_df.sort_values('velocity_score', ascending=False).iloc[0]
+    velocity = top_accel['velocity_score']
+
+    # Seuil a 2 : au-dessus = signal statistiquement anormal -> reco de surveillance renforcee
+    is_anormal = velocity >= 2.0
+
+    _activity = {
+        "en": "abnormal" if is_anormal else "normal",
+        "fr": "anormale" if is_anormal else "normale",
+    }
+    _reco = {
+        "en": "Increased monitoring of this feed is strongly recommended." if is_anormal
+              else "Routine monitoring of this feed is recommended.",
+        "fr": "Une surveillance accrue de ce flux est fortement recommandee." if is_anormal
+              else "Une surveillance de ce flux est recommandee.",
+    }
     _insight = {
-        "en": f"<b>Flow analysis:</b> Source <b>{top_accel['source']}</b> shows abnormal activity with an acceleration index of <b>{top_accel['velocity_score']:.1f}x</b>. Increased monitoring of this feed is recommended.",
-        "fr": f"<b>Analyse des flux :</b> La source <b>{top_accel['source']}</b> montre une activite anormale avec un indice d'acceleration de <b>{top_accel['velocity_score']:.1f}x</b>. Une surveillance accrue de ce flux est recommandee.",
+        "en": f"<b>Flow analysis:</b> Source <b>{top_accel['source']}</b> shows <b>{_activity['en']}</b> activity with an acceleration index of <b>{velocity:.1f}x</b>. {_reco['en']}",
+        "fr": f"<b>Analyse des flux :</b> La source <b>{top_accel['source']}</b> montre une activite <b>{_activity['fr']}</b> avec un indice d'acceleration de <b>{velocity:.1f}x</b>. {_reco['fr']}",
     }
     st.markdown(f'<div class="insight-box">{_insight[lang]}</div>', unsafe_allow_html=True)
 
