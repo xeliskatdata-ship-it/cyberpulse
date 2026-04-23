@@ -2,7 +2,7 @@ name: StatCyberMatrix Pipeline
 
 on:
   schedule:
-    - cron: '0 * /3 * * *'  # Toutes les 3 heures (j'ai divisé l'egress par 3)
+    - cron: '0 */3 * * *'  # Toutes les 3 heures (j'ai divisé l'egress par 3)
   workflow_dispatch:       # Lancement manuel possible
 
 jobs:
