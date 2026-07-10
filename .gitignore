@@ -55,3 +55,4 @@ data/
 
 # Fichier temporaire de nettoyage d'historique (NE PAS COMMITER)
 secrets-to-remove.txt
+scripts/probe_*.py
